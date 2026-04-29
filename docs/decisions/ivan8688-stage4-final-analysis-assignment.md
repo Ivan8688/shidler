@@ -390,15 +390,347 @@ The following prompt instructs an AI (Claude, ChatGPT, or equivalent) to generat
 
 ### AI Prompt (Copy-Paste Ready):
 
+Create a complete, production-ready Excel workbook that models hedging strategies for a EUR-denominated receivable. The workbook must include:
+
+- Input section with named ranges (color-coded)
+- Forward hedge calculation
+- Money market hedge (3-step synthetic forward)
+- Put option hedge
+- Call option hedge (for collar construction)
+- Collar hedge (put + call combined)
+- Sensitivity analysis table (11 scenarios: spot movement ±5%)
+- Verification checks (forward vs. money market parity, formula consistency)
+
+**Audience:** Treasury analysts at TechServe Global  
+**Required format:** Single worksheet, professionally formatted, color-coded, with clear section headers
+
 ---
 
-### **# FX HEDGING SPREADSHEET – STRUCTURED AI GENERATION PROMPT**
+## INPUT VARIABLES (USE EXACT VALUES – NO INFERENCE)
 
-#### **GOAL**
+| Variable | Value | Unit / Description |
+|----------|-------|---------------------|
+| **FC_AMT** | 12,500,000 | Euro notional (€) |
+| **S0_in** | 1.0875 | Current spot USD/EUR |
+| **F0_in** | 1.0910 | 1-year forward USD/EUR |
+| **R_USD** | 5.25% | US dollar interest rate (annual) |
+| **R_FC** | 4.00% | Euro interest rate (annual) |
+| **K_PUT** | 1.0875 | Put option strike (ATM) |
+| **K_CALL** | 1.1200 | Call option strike (OTM) |
+| **PREM_PUT** | 0.0170 | Put premium (USD per EUR) |
+| **PREM_CALL** | 0.0220 | Call premium (USD per EUR) |
+| **T_DAYS** | 365 | Time to maturity (days) |
 
-Create a complete Excel workbook modeling forward, money market, and option-based hedges for a EUR receivable. The workbook must be production-ready: color-coded, formula-based, include named ranges, and provide a sensitivity analysis across 11 FX scenarios.
+**Important:** Do not calculate, infer, or substitute any of these values. Use them exactly as shown.
 
-#### **SCENARIO-SPECIFIC INPUT VARIABLES**
+---
 
-Use the following values **exactly as stated** — do not infer, estimate, or substitute:
+## NAMED RANGE CONVENTIONS
+
+Create the following named ranges in the Excel Name Manager. These names must be usable in formulas throughout the workbook.
+
+| Named Range | Refers To |
+|-------------|-----------|
+| FC_AMT | Input cell containing 12,500,000 |
+| S0_in | Input cell containing 1.0875 |
+| F0_in | Input cell containing 1.0910 |
+| R_USD | Input cell containing 5.25% |
+| R_FC | Input cell containing 4.00% |
+| K_PUT | Input cell containing 1.0875 |
+| K_CALL | Input cell containing 1.1200 |
+| PREM_PUT | Input cell containing 0.0170 |
+| PREM_CALL | Input cell containing 0.0220 |
+| T_DAYS | Input cell containing 365 |
+
+**Naming convention:** Use underscore separators. All names are UPPER_CASE.
+
+---
+
+## SPREADSHEET REQUIREMENTS
+
+### Section 1: Input & Assumptions Area (Rows 1–25)
+
+**Layout:**
+- **Rows 1–2:** Section header "INPUTS & ASSUMPTIONS"
+- **Rows 3–12:** Variable labels in Column A, values in Column B
+- **Row 14–15:** Section header "DERIVED VALUES"
+- **Rows 16–18:** Derived calculations (see below)
+
+**Color Coding (strict):**
+- **Yellow fill (RGB 255,255,0):** All input cells where user enters values (FC_AMT, S0_in, F0_in, R_USD, R_FC, K_PUT, K_CALL, PREM_PUT, PREM_CALL, T_DAYS)
+- **Blue fill (RGB 0,112,192):** Assumption cells (e.g., "T_DAYS = 365" – this is a fixed assumption, not a model output)
+- **Green fill (RGB 0,176,80):** Formula cells (derived values, hedge calculations, any cell containing `=`)
+- **Gray fill (RGB 128,128,128):** Output cells (final USD proceeds per strategy)
+
+**Derived Values to Calculate:**
+| Derived Value | Formula |
+|---------------|---------|
+| **FV factor USD** | `=(1+R_USD)^(T_DAYS/365)` |
+| **FV factor EUR** | `=(1+R_FC)^(T_DAYS/365)` |
+| **Forward from parity** | `=S0_in * (FV_USD/FV_EUR)` |
+
+---
+
+### Section 2: Forward Hedge (Rows 30–45)
+
+**Layout:**
+- Row 30: Section header "FORWARD CONTRACT HEDGE"
+- Row 32: Label "Forward Rate Used" → Value: `=F0_in`
+- Row 33: Label "USD Proceeds (All Scenarios)" → Value: `=FC_AMT * F0_in`
+- Row 34: Label "Premium Cost" → Value: `0`
+- Row 35: Label "Net USD Proceeds" → Value: `=FC_AMT * F0_in`
+
+**Color coding:** All formula cells green (except output cell gray).
+
+**Verification note:** Add a comment in Row 37: "Forward rate locked today; no optionality; zero premium."
+
+---
+
+### Section 3: Money Market Hedge (Rows 50–70)
+
+**Layout:**
+- Row 50: Section header "MONEY MARKET HEDGE (Synthetic Forward)"
+- Row 52: Label "Step 1: PV of EUR Receivable" → Formula: `=FC_AMT / (1+R_FC)^(T_DAYS/365)`
+- Row 53: Label "Step 2: Borrow EUR (PV amount)" → Formula: `=FC_AMT / (1+R_FC)^(T_DAYS/365)`
+- Row 54: Label "Step 3: Convert EUR to USD at Spot" → Formula: `= (FC_AMT / (1+R_FC)^(T_DAYS/365)) * S0_in`
+- Row 55: Label "Step 4: Invest USD for 1 year" → Formula: `= (FC_AMT / (1+R_FC)^(T_DAYS/365)) * S0_in * (1+R_USD)^(T_DAYS/365)`
+- Row 56: Label "Step 5: Repay EUR loan with receivable" → Label only (no formula)
+- Row 57: Label "Net USD Proceeds" → Formula: `= (FC_AMT / (1+R_FC)^(T_DAYS/365)) * S0_in * (1+R_USD)^(T_DAYS/365)`
+
+**Color coding:** All formula cells green; final output (Row 57) gray fill.
+
+**Add comment on Row 60:** "Money market hedge replicates forward. Difference vs. forward rate indicates arbitrage or rounding."
+
+---
+
+### Section 4: Put Option Hedge (Rows 75–100)
+
+**Layout:**
+- Row 75: Section header "PUT OPTION HEDGE (Downside Protection)"
+- Row 77: Label "Put Strike (K_PUT)" → Value: `=K_PUT`
+- Row 78: Label "Put Premium (per EUR)" → Value: `=PREM_PUT`
+- Row 79: Label "Total Premium Paid" → Formula: `=FC_AMT * PREM_PUT`
+- Row 80: Label "Strike USD Proceeds (if exercised)" → Formula: `=FC_AMT * K_PUT`
+
+**Payoff formula for Row 82 (Label "Payoff at Spot (S_T)"):**
+- Create a sensitivity cell where user inputs S_T (reference cell E82)
+- Payoff formula: `=MAX(K_PUT, S_T) * FC_AMT`
+
+**Net USD Proceeds formula:** `= (MAX(K_PUT, S_T) * FC_AMT) - (FC_AMT * PREM_PUT)`
+
+**Add explanatory text in Row 85:** "Put option establishes floor at K_PUT. Premium reduces net proceeds but preserves upside."
+
+---
+
+### Section 5: Call Option Hedge (Rows 105–130)
+
+**Layout:**
+- Row 105: Section header "CALL OPTION HEDGE (For Collar Construction)"
+- Row 107: Label "Call Strike (K_CALL)" → Value: `=K_CALL`
+- Row 108: Label "Call Premium (per EUR)" → Value: `=PREM_CALL`
+- Row 109: Label "Total Premium Received (if sold)" → Formula: `=FC_AMT * PREM_CALL`
+
+**Payoff formula (Row 111):** `=MIN(K_CALL, S_T) * FC_AMT`
+
+**Note (Row 113):** "This section models a short call position (sold call). Used in collar to offset put premium."
+
+---
+
+### Section 6: Collar Hedge (Rows 135–165)
+
+**Layout:**
+- Row 135: Section header "COLLAR HEDGE (Put + Short Call)"
+- Row 137: Label "Long Put Premium Paid" → Formula: `=FC_AMT * PREM_PUT`
+- Row 138: Label "Short Call Premium Received" → Formula: `=FC_AMT * PREM_CALL`
+- Row 139: Label "Net Premium (Cost) / Credit" → Formula: `=(FC_AMT * PREM_PUT) - (FC_AMT * PREM_CALL)`
+
+**Payoff formula (Row 141):**
+- Label "Collar Payoff at S_T"
+- Formula: `= (MAX(K_PUT, MIN(K_CALL, S_T))) * FC_AMT`
+
+**Net USD Proceeds (Row 143):**
+- Formula: `= (MAX(K_PUT, MIN(K_CALL, S_T))) * FC_AMT + (FC_AMT * PREM_CALL) - (FC_AMT * PREM_PUT)`
+
+**Alternative simplified:** `= Collar_Payoff + Net_Premium_Credit`
+
+**Add note (Row 146):** "Net credit = $62,500 when S_T ≥ K_CALL. Range defined: floor at K_PUT, cap at K_CALL."
+
+---
+
+### Section 7: Sensitivity Analysis Table (Rows 175–210)
+
+**Layout:**
+- Row 175: Section header "SENSITIVITY ANALYSIS – USD PROCEEDS BY SPOT RATE"
+- Row 177: Column headers:
+
+| A | B | C | D | E | F |
+|---|---|---|---|---|---|
+| Scenario | Spot Rate (S_T) | Unhedged | Forward | Put Option | Collar |
+
+**Spot Rate scenarios (Rows 178–188):**
+
+| Row | Scenario | Spot Rate | Formula |
+|-----|----------|-----------|---------|
+| 178 | −5.0% | `=S0_in * (1-0.05)` | |
+| 179 | −4.0% | `=S0_in * (1-0.04)` | |
+| 180 | −3.0% | `=S0_in * (1-0.03)` | |
+| 181 | −2.0% | `=S0_in * (1-0.02)` | |
+| 182 | −1.0% | `=S0_in * (1-0.01)` | |
+| 183 | 0% (Base) | `=S0_in` | |
+| 184 | +1.0% | `=S0_in * (1+0.01)` | |
+| 185 | +2.0% | `=S0_in * (1+0.02)` | |
+| 186 | +3.0% | `=S0_in * (1+0.03)` | |
+| 187 | +4.0% | `=S0_in * (1+0.04)` | |
+| 188 | +5.0% | `=S0_in * (1+0.05)` | |
+
+**Formula references for each column:**
+
+- **Unhedged (Column C):** `=FC_AMT * [Spot Rate cell]`
+- **Forward (Column D):** `=FC_AMT * F0_in` (identical for all rows)
+- **Put Option (Column E):** `=(MAX(K_PUT, [Spot Rate cell]) * FC_AMT) - (FC_AMT * PREM_PUT)`
+- **Collar (Column F):** `=(MAX(K_PUT, MIN(K_CALL, [Spot Rate cell])) * FC_AMT) + (FC_AMT * PREM_CALL) - (FC_AMT * PREM_PUT)`
+
+**Formatting:** Use green fill for all formula cells. Add conditional formatting to highlight the worst-case and best-case USD proceeds per column.
+
+---
+
+### Section 8: Verification Checks (Rows 220–240)
+
+**Layout:**
+- Row 220: Section header "VERIFICATION CHECKS"
+- Row 222: Label "Forward Rate from Interest Rate Parity" → Formula: `=S0_in * ((1+R_USD)^(T_DAYS/365) / (1+R_FC)^(T_DAYS/365))`
+- Row 223: Label "Given Forward Rate (F0_in)" → Value: `=F0_in`
+- Row 224: Label "Difference (Parity Check)" → Formula: `=ABS([Forward from parity] - F0_in)`
+- Row 225: Label "Parity Pass/Fail" → Formula: `=IF([Difference] < 0.0001, "PASS", "FAIL")`
+
+**Additional check (Row 227):**
+- Label "Money Market vs. Forward Difference"
+- Formula: `=[Money Market Net Proceeds] - (FC_AMT * F0_in)`
+- Tolerance: Difference < 0.1% of notional → acceptable
+
+**Add check (Row 229):**
+- Label "Put-Call Parity (Collar) Check"
+- Formula: `= ([Put Premium] + K_CALL) vs. ([Call Premium] + K_PUT)` — conceptual check only
+
+---
+
+### Section 9: Summary Output Table (Rows 245–260)
+
+**Layout:**
+- Row 245: Section header "HEDGE STRATEGY SUMMARY – BASE CASE (S_T = S0)"
+- Create a clean summary table:
+
+| Strategy | USD Proceeds | Upfront Cost | Downside Protected? | Upside Captured? |
+|----------|--------------|--------------|---------------------|------------------|
+| Unhedged | [formula] | $0 | No | Yes |
+| Forward | [formula] | $0 | Yes (full) | No |
+| Put Option | [formula] | [formula] | Yes (floor) | Yes |
+| Collar | [formula] | [formula] | Yes (floor) | Capped |
+
+**Color coding:** Output cells (USD Proceeds column) = gray fill. All other cells = green fill (formulas) or yellow fill (if manual entry required).
+
+---
+
+## HIERARCHICAL STRUCTURE REQUIREMENTS
+
+Organize the worksheet using **bold section headers** with consistent formatting:
+
+- **Font:** Calibri, 12pt for body, 14pt bold for section headers
+- **Section header format:** Dark blue text, light gray background, underline
+- **Row grouping:** Insert a blank row (height = 5) between each major section
+
+**Section order (top to bottom):**
+1. INPUTS & ASSUMPTIONS
+2. FORWARD CONTRACT HEDGE
+3. MONEY MARKET HEDGE
+4. PUT OPTION HEDGE
+5. CALL OPTION HEDGE
+6. COLLAR HEDGE
+7. SENSITIVITY ANALYSIS
+8. VERIFICATION CHECKS
+9. HEDGE STRATEGY SUMMARY
+
+---
+
+## EXPORT FORMAT
+
+Generate the workbook in **Excel (.xlsx) format** with:
+
+- One worksheet named "FX_Hedging_Model"
+- All formulas live (no hard-coded values except inputs)
+- Named ranges defined in Name Manager
+- Conditional formatting applied to sensitivity table (color scale: green = high proceeds, red = low proceeds)
+- Print area set to Rows 1–260, Columns A–F
+- Page layout: Landscape orientation, fit to 1 page wide
+
+---
+
+## FINAL VERIFICATION CHECKLIST
+
+Before delivering the spreadsheet, confirm:
+
+- [ ] All input values match the table in Section 2 exactly (no inferred or rounded values)
+- [ ] Named ranges are case-sensitive and use underscores
+- [ ] Color coding matches specification (Yellow = Inputs, Blue = Assumptions, Green = Formulas, Gray = Outputs)
+- [ ] Forward hedge locks proceeds at `FC_AMT * F0_in`
+- [ ] Money market hedge includes all 5 steps with visible formulas
+- [ ] Put option payoff uses `MAX(K_PUT, S_T)`
+- [ ] Collar payoff uses `MAX(K_PUT, MIN(K_CALL, S_T))`
+- [ ] Sensitivity table has 11 rows with formulas referencing S0_in dynamically
+- [ ] Verification checks include parity validation
+- [ ] No circular references
+- [ ] No #REF! or #NAME? errors
+
+**Deliverable:** A single Excel file ready for TechServe treasury analysts to use with Scenario 3 data.
+---
+## Extra Credit: Areas for Further Study & Improvement
+
+### 1. AI Skills & Automation – Live Market Data, On‑Demand Rebuilding, and Monte Carlo Simulations
+
+The structured prompt developed in Stage 4 is the foundation for a fully automated FX hedging engine. By integrating AI tools (e.g., Claude Skills or ChatGPT Code Interpreter) with live market data APIs (Bloomberg, Refinitiv, OANDA, ECB), TechServe's treasury team could:
+
+- **Pull real‑time data** – spot rates, forward points, interest rate curves – and automatically populate the named ranges (`S0_in`, `F0_in`, `R_USD`, `R_FC`, etc.).
+- **Regenerate the model on demand** – daily or weekly – without manual entry, using the exact same prompt template.
+- **Run Monte Carlo simulations** – model thousands of EUR/USD paths (geometric Brownian motion with realistic volatility) and output probability distributions of USD proceeds for each hedge strategy. The AI could then recommend a strategy based on user‑defined risk tolerance (e.g., “minimize 5% value‑at‑risk”). This turns a static spreadsheet into an adaptive, data‑driven risk management tool.
+
+**Connection to the project:** The prompt already defines all variables and sensitivity ranges. Automating data ingestion and probabilistic simulation would elevate the analysis from deterministic scenarios to robust risk‑adjusted decision support.
+
+---
+
+### 2. Multi‑File Reasoning – Maintaining Consistency Across Spec, Model, and Prompt
+
+AI models with extended context (Claude 3.5 Sonnet, ChatGPT with file uploads) can read **three artifacts simultaneously** – the Stage 1–3 specification, the Stage 4 prompt, and the generated Excel workbook – to ensure consistency.
+
+- **Cross‑reference checking:** The AI can verify that the spec’s exposure (€12.5M, 12 months, Scenario 3 data) matches the prompt’s input variables and the model’s formulas. Discrepancies (e.g., interest rate differential rounding) are flagged and corrected.
+- **Automated model rebuilds:** If TechServe signs a new €15M, 6‑month contract, the analyst updates only the spec file. The AI reads the new spec, infers changed variables (`FC_AMT = 15,000,000`, `T_DAYS = 180`), and regenerates a complete workbook while preserving all formula logic and formatting.
+- **Dashboard generation:** The AI can create a Power BI or Excel Power Query dashboard that pulls historical hedging outcomes from multiple regeneration runs, showing actual USD proceeds vs. locked‑in forward rates over time – a powerful feedback loop for treasury performance.
+
+**Connection to the project:** The structured prompt is already designed as a reusable template. Multi‑file reasoning enables seamless adaptation to new exposures without re‑writing the entire model.
+
+---
+
+### 3. GitHub & Version Control – Auditability and Reproducible Model Regeneration
+
+Committing the Stage 1–3 specs, the Stage 4 prompt, and the generated Excel workbook to a **GitHub repository** creates an immutable, timestamped record of every decision and calculation.
+
+- **Reproducibility:** An auditor clones the repo, re‑runs the exact prompt using an AI with the same configuration, and regenerates the model. If the output matches the committed workbook, the hedge accounting entries (e.g., the $13,637,500 forward value) are validated.
+- **Change tracking:** GitHub’s diff view shows exactly which inputs changed and when – critical for hedge effectiveness testing under ASC 815. The spot and forward rates on the designation date are traceable back to the committed spec.
+- **Collaboration & approval:** Pull request workflow allows the treasury analyst to propose a new model version, the CFO to review the changed prompt, and only after approval can the model be regenerated and merged. This prevents unauthorized changes.
+- **Audit evidence:** The repository becomes a legally defensible record that TechServe followed a systematic, documented, and reproducible hedging process – superior to scattered emails or one‑off spreadsheets.
+
+**Connection to the project:** Stages 1–3 document the qualitative reasoning (exposure analysis, market scenarios, strategy design). GitHub ties that reasoning to the quantitative implementation (the prompt and Excel model), creating a closed‑loop audit trail.
+
+---
+
+### 4. Accounting & Audit Integration – Hedge Documentation, OCI vs. P&L, and GitHub as Evidence
+
+The project’s hedge strategies have distinct accounting treatments under IFRS 9 or ASC 815. The structured prompt can be extended to enforce compliance.
+
+- **OCI vs. P&L impact:** For the recommended forward contract (cash flow hedge), the AI could generate two additional columns: “OCI impact (mid‑period)” and “P&L impact at settlement,” showing how earnings volatility is smoothed.
+- **Option accounting flag:** For the put option (if not designated as a hedge), the AI would automatically flag that the $212,500 premium is immediately recognized in P&L – a disadvantage – and add a note: “Consider effectiveness testing to qualify for hedge accounting.”
+- **Documentation requirements:** ASC 815 requires contemporaneous documentation of the hedging relationship, risk management objective, and effectiveness assessment. The GitHub repository (timestamps, commit messages) serves as digital audit evidence that documentation was prepared before or at hedge inception. The Stage 4 markdown file – containing executive recommendation, rationale, and market data snapshot – is a perfect “memorandum to file.”
+- **Reproducibility for audits:** An auditor takes the exact prompt from GitHub, runs it through an AI using the same market data snapshot, and verifies that the model’s outputs match the journal entries. If TechServe uses a third‑party AI service, auditor review of system logs (if available) confirms no unauthorized modifications.
+
+**Connection to the project:** Combining AI‑driven spreadsheet generation with GitHub version control transforms a one‑off hedging analysis into an auditable, repeatable, and compliant treasury workflow – directly aligned with the executive recommendation and Stage 4’s focus on risk mitigation and budget certainty.
+
 
